@@ -82,8 +82,8 @@ pub struct RawData(pub u32);
 
 impl<T: AsRef<[u8]>> Setter<T> for RawData {
     #[inline(always)]
-    fn write_clipboard(&self, data: &T) -> SysResult<()> {
-        crate::raw::set(self.0, data.as_ref())
+    fn write_clipboard(&self, data: &T, need_clear: bool) -> SysResult<()> {
+        crate::raw::set(self.0, data.as_ref(), need_clear)
     }
 }
 
@@ -115,8 +115,8 @@ impl Getter<alloc::string::String> for Unicode {
 
 impl<T: AsRef<str>> Setter<T> for Unicode {
     #[inline(always)]
-    fn write_clipboard(&self, data: &T) -> SysResult<()> {
-        crate::raw::set_string(data.as_ref())
+    fn write_clipboard(&self, data: &T, need_clear: bool) -> SysResult<()> {
+        crate::raw::set_string(data.as_ref(), need_clear)
     }
 }
 
@@ -144,8 +144,8 @@ impl Getter<alloc::vec::Vec<std::path::PathBuf>> for FileList {
 
 impl<T: AsRef<str>> Setter<[T]> for FileList {
     #[inline(always)]
-    fn write_clipboard(&self, data: &[T]) -> SysResult<()> {
-        crate::raw::set_file_list(data, false)
+    fn write_clipboard(&self, data: &[T], need_clear: bool) -> SysResult<()> {
+        crate::raw::set_file_list(data, need_clear)
     }
 }
 
@@ -163,7 +163,7 @@ impl Getter<alloc::vec::Vec<u8>> for Bitmap {
 
 impl<T: AsRef<[u8]>> Setter<T> for Bitmap {
     #[inline(always)]
-    fn write_clipboard(&self, data: &T) -> SysResult<()> {
-        crate::raw::set_bitmap(data.as_ref(), true)
+    fn write_clipboard(&self, data: &T, need_clear: bool) -> SysResult<()> {
+        crate::raw::set_bitmap(data.as_ref(), need_clear)
     }
 }

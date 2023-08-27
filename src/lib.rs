@@ -47,7 +47,7 @@
 //!const SAMPLE: &str = "MY loli sample ^^";
 //!
 //!let _clip = Clipboard::new_attempts(10).expect("Open clipboard");
-//!formats::Unicode.write_clipboard(&SAMPLE).expect("Write sample");
+//!formats::Unicode.write_clipboard(&SAMPLE, true).expect("Write sample");
 //!
 //!let mut output = String::new();
 //!
@@ -91,8 +91,10 @@ pub mod formats;
 pub mod raw;
 pub(crate) mod utils;
 
-pub use raw::{get_owner, empty, seq_num, size, is_format_avail, register_format, count_formats, EnumFormats};
 pub use formats::Unicode;
+pub use raw::{
+    count_formats, empty, get_owner, is_format_avail, register_format, seq_num, size, EnumFormats,
+};
 
 pub use error_code::SystemError;
 ///Alias to result used by this crate
@@ -111,7 +113,7 @@ pub type SysResult<T> = Result<T, error_code::SystemError>;
 ///
 ///Therefore as soon as operations are finished, user is advised to close Clipboard.
 pub struct Clipboard {
-    _dummy: ()
+    _dummy: (),
 }
 
 impl Clipboard {
@@ -135,14 +137,17 @@ impl Clipboard {
 
     #[inline]
     ///Attempts to open clipboard, giving it `num` retries in case of failure.
-    pub fn new_attempts_for(owner: winapi::shared::windef::HWND, mut num: usize) -> SysResult<Self> {
+    pub fn new_attempts_for(
+        owner: winapi::shared::windef::HWND,
+        mut num: usize,
+    ) -> SysResult<Self> {
         loop {
             match Self::new_for(owner) {
                 Ok(this) => break Ok(this),
                 Err(err) => match num {
                     0 => break Err(err),
                     _ => num -= 1,
-                }
+                },
             }
 
             //0 causes to yield remaining time in scheduler, but remain to be scheduled once again.
@@ -170,7 +175,7 @@ pub trait Getter<Type> {
 ///Default implementations only perform write, without opening/closing clipboard
 pub trait Setter<Type: ?Sized> {
     ///Writes content of `data` onto clipboard, returning whether it was successful or not
-    fn write_clipboard(&self, data: &Type) -> SysResult<()>;
+    fn write_clipboard(&self, data: &Type, need_clear: bool) -> SysResult<()>;
 }
 
 #[inline(always)]
@@ -213,7 +218,7 @@ pub fn get_clipboard<R: Default, T: Getter<R>>(format: T) -> SysResult<R> {
 #[inline(always)]
 ///Set data onto clipboard.
 pub fn set<R, T: Setter<R>>(format: T, data: R) -> SysResult<()> {
-    format.write_clipboard(&data)
+    format.write_clipboard(&data, true)
 }
 
 #[inline(always)]

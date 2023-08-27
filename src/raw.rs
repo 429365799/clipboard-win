@@ -275,8 +275,10 @@ pub fn get_vec(format: u32, out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
 /// Copies raw bytes onto clipboard with specified `format`, returning whether it was successful.
 ///
 /// This function empties the clipboard before setting the data.
-pub fn set(format: u32, data: &[u8]) -> SysResult<()> {
-    let _ = empty();
+pub fn set(format: u32, data: &[u8], need_clear: bool) -> SysResult<()> {
+    if need_clear {
+        let _ = empty();
+    }
     set_without_clear(format, data)
 }
 
@@ -359,7 +361,7 @@ pub fn get_string(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
 
 ///Copies unicode string onto clipboard, performing necessary conversions, returning true on
 ///success.
-pub fn set_string(data: &str) -> SysResult<()> {
+pub fn set_string(data: &str, need_clear: bool) -> SysResult<()> {
     let size = unsafe {
         MultiByteToWideChar(
             CP_UTF8,
@@ -390,7 +392,9 @@ pub fn set_string(data: &str) -> SysResult<()> {
             }
         }
 
-        let _ = empty();
+        if need_clear {
+            let _ = empty();
+        }
 
         if unsafe { !SetClipboardData(formats::CF_UNICODETEXT, mem.get()).is_null() } {
             //SetClipboardData takes ownership
