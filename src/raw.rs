@@ -10,29 +10,37 @@
 //!
 //! After that Clipboard cannot be opened any more until [close()](fn.close.html) is called.
 
-use winapi::um::winuser::{OpenClipboard, CloseClipboard, EmptyClipboard, GetClipboardSequenceNumber, GetClipboardData, IsClipboardFormatAvailable, CountClipboardFormats, EnumClipboardFormats, GetClipboardFormatNameW, RegisterClipboardFormatW, SetClipboardData, GetDC, ReleaseDC, GetClipboardOwner};
-use winapi::um::winbase::{GlobalSize, GlobalLock, GlobalUnlock};
 use winapi::ctypes::{c_int, c_uint, c_void};
-use winapi::um::stringapiset::{MultiByteToWideChar, WideCharToMultiByte};
-use winapi::um::winnls::CP_UTF8;
-use winapi::um::shellapi::DragQueryFileW;
-use winapi::um::wingdi::{GetObjectW, GetDIBits, CreateDIBitmap, BITMAP, BITMAPINFO, BITMAPINFOHEADER, RGBQUAD, BI_RGB, DIB_RGB_COLORS, BITMAPFILEHEADER, CBM_INIT};
+use winapi::shared::minwindef::DWORD;
 use winapi::shared::windef::HDC;
 use winapi::shared::winerror::ERROR_INCORRECT_SIZE;
-use winapi::shared::minwindef::DWORD;
+use winapi::um::shellapi::DragQueryFileW;
+use winapi::um::stringapiset::{MultiByteToWideChar, WideCharToMultiByte};
+use winapi::um::winbase::{GlobalLock, GlobalSize, GlobalUnlock};
+use winapi::um::wingdi::{
+    CreateDIBitmap, GetDIBits, GetObjectW, BITMAP, BITMAPFILEHEADER, BITMAPINFO, BITMAPINFOHEADER,
+    BI_RGB, CBM_INIT, DIB_RGB_COLORS, RGBQUAD,
+};
+use winapi::um::winnls::CP_UTF8;
+use winapi::um::winuser::{
+    CloseClipboard, CountClipboardFormats, EmptyClipboard, EnumClipboardFormats, GetClipboardData,
+    GetClipboardFormatNameW, GetClipboardOwner, GetClipboardSequenceNumber, GetDC,
+    IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW, ReleaseDC,
+    SetClipboardData,
+};
 
-use str_buf::StrBuf;
 use error_code::SystemError;
+use str_buf::StrBuf;
 
-use core::{slice, mem, ptr, cmp};
-use core::num::{NonZeroUsize, NonZeroU32};
+use core::num::{NonZeroU32, NonZeroUsize};
+use core::{cmp, mem, ptr, slice};
 
-use alloc::string::String;
 use alloc::borrow::ToOwned;
 use alloc::format;
+use alloc::string::String;
 
-use crate::{SysResult, formats};
 use crate::utils::{unlikely_empty_size_result, RawMem};
+use crate::{formats, SysResult};
 
 #[inline(always)]
 fn free_dc(data: HDC) {
@@ -160,10 +168,10 @@ pub unsafe fn size_unsafe(format: u32) -> Option<NonZeroUsize> {
 ///
 ///Size in bytes if format is presents on clipboard.
 pub fn size(format: u32) -> Option<NonZeroUsize> {
-    let clipboard_data = unsafe {GetClipboardData(format)};
+    let clipboard_data = unsafe { GetClipboardData(format) };
 
     if clipboard_data.is_null() {
-        return None
+        return None;
     }
 
     unsafe {
@@ -210,7 +218,7 @@ pub fn count_formats() -> Option<usize> {
 
     if result == 0 {
         if !SystemError::last().is_zero() {
-            return None
+            return None;
         }
     }
 
@@ -307,7 +315,16 @@ pub fn get_string(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
     let result = unsafe {
         let (data_ptr, _lock) = ptr.lock()?;
         let data_size = GlobalSize(ptr.get()) as usize / mem::size_of::<u16>();
-        let storage_req_size = WideCharToMultiByte(CP_UTF8, 0, data_ptr.as_ptr() as _, data_size as _, ptr::null_mut(), 0, ptr::null(), ptr::null_mut());
+        let storage_req_size = WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            data_ptr.as_ptr() as _,
+            data_size as _,
+            ptr::null_mut(),
+            0,
+            ptr::null(),
+            ptr::null_mut(),
+        );
 
         if storage_req_size == 0 {
             return Err(SystemError::last());
@@ -316,7 +333,16 @@ pub fn get_string(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
         let storage_cursor = out.len();
         out.reserve(storage_req_size as usize);
         let storage_ptr = out.as_mut_ptr().add(storage_cursor) as *mut _;
-        WideCharToMultiByte(CP_UTF8, 0, data_ptr.as_ptr() as _, data_size as _, storage_ptr, storage_req_size, ptr::null(), ptr::null_mut());
+        WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            data_ptr.as_ptr() as _,
+            data_size as _,
+            storage_ptr,
+            storage_req_size,
+            ptr::null(),
+            ptr::null_mut(),
+        );
         out.set_len(storage_cursor + storage_req_size as usize);
 
         //It seems WinAPI always supposed to have at the end null char.
@@ -335,7 +361,14 @@ pub fn get_string(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
 ///success.
 pub fn set_string(data: &str) -> SysResult<()> {
     let size = unsafe {
-        MultiByteToWideChar(CP_UTF8, 0, data.as_ptr() as *const _, data.len() as _, ptr::null_mut(), 0)
+        MultiByteToWideChar(
+            CP_UTF8,
+            0,
+            data.as_ptr() as *const _,
+            data.len() as _,
+            ptr::null_mut(),
+            0,
+        )
     };
 
     //MultiByteToWideChar fails on empty input, but we can ignore it and just set buffer with null char
@@ -345,7 +378,14 @@ pub fn set_string(data: &str) -> SysResult<()> {
             let (ptr, _lock) = mem.lock()?;
             let ptr = ptr.as_ptr() as *mut u16;
             unsafe {
-                MultiByteToWideChar(CP_UTF8, 0, data.as_ptr() as *const _, data.len() as _, ptr, size);
+                MultiByteToWideChar(
+                    CP_UTF8,
+                    0,
+                    data.as_ptr() as *const _,
+                    data.len() as _,
+                    ptr,
+                    size,
+                );
                 ptr::write(ptr.offset(size as isize), 0);
             }
         }
@@ -373,13 +413,15 @@ pub fn get_file_list_path(out: &mut alloc::vec::Vec<std::path::PathBuf>) -> SysR
 
     let (_data_ptr, _lock) = clipboard_data.lock()?;
 
-    let num_files = unsafe { DragQueryFileW(clipboard_data.get() as _, u32::MAX, ptr::null_mut(), 0) };
+    let num_files =
+        unsafe { DragQueryFileW(clipboard_data.get() as _, u32::MAX, ptr::null_mut(), 0) };
     out.reserve(num_files as usize);
 
     let mut buffer = alloc::vec::Vec::new();
 
     for idx in 0..num_files {
-        let required_size_no_null = unsafe { DragQueryFileW(clipboard_data.get() as _, idx, ptr::null_mut(), 0) };
+        let required_size_no_null =
+            unsafe { DragQueryFileW(clipboard_data.get() as _, idx, ptr::null_mut(), 0) };
         if required_size_no_null == 0 {
             return Err(SystemError::last());
         }
@@ -387,7 +429,14 @@ pub fn get_file_list_path(out: &mut alloc::vec::Vec<std::path::PathBuf>) -> SysR
         let required_size = required_size_no_null + 1;
         buffer.reserve(required_size as usize);
 
-        if unsafe { DragQueryFileW(clipboard_data.get() as _, idx, buffer.as_mut_ptr(), required_size) == 0 } {
+        if unsafe {
+            DragQueryFileW(
+                clipboard_data.get() as _,
+                idx,
+                buffer.as_mut_ptr(),
+                required_size,
+            ) == 0
+        } {
             return Err(SystemError::last());
         }
 
@@ -411,13 +460,15 @@ pub fn get_file_list(out: &mut alloc::vec::Vec<alloc::string::String>) -> SysRes
 
     let (_data_ptr, _lock) = clipboard_data.lock()?;
 
-    let num_files = unsafe { DragQueryFileW(clipboard_data.get() as _, u32::MAX, ptr::null_mut(), 0) };
+    let num_files =
+        unsafe { DragQueryFileW(clipboard_data.get() as _, u32::MAX, ptr::null_mut(), 0) };
     out.reserve(num_files as usize);
 
     let mut buffer = alloc::vec::Vec::new();
 
     for idx in 0..num_files {
-        let required_size_no_null = unsafe { DragQueryFileW(clipboard_data.get() as _, idx, ptr::null_mut(), 0) };
+        let required_size_no_null =
+            unsafe { DragQueryFileW(clipboard_data.get() as _, idx, ptr::null_mut(), 0) };
         if required_size_no_null == 0 {
             return Err(SystemError::last());
         }
@@ -425,7 +476,14 @@ pub fn get_file_list(out: &mut alloc::vec::Vec<alloc::string::String>) -> SysRes
         let required_size = required_size_no_null + 1;
         buffer.reserve(required_size as usize);
 
-        if unsafe { DragQueryFileW(clipboard_data.get() as _, idx, buffer.as_mut_ptr(), required_size) == 0 } {
+        if unsafe {
+            DragQueryFileW(
+                clipboard_data.get() as _,
+                idx,
+                buffer.as_mut_ptr(),
+                required_size,
+            ) == 0
+        } {
             return Err(SystemError::last());
         }
 
@@ -456,7 +514,14 @@ pub fn get_bitmap(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
         bmBits: ptr::null_mut(),
     };
 
-    if unsafe { GetObjectW(clipboard_data.as_ptr(), mem::size_of::<BITMAP>() as _, &mut bitmap as *mut BITMAP as _) } == 0 {
+    if unsafe {
+        GetObjectW(
+            clipboard_data.as_ptr(),
+            mem::size_of::<BITMAP>() as _,
+            &mut bitmap as *mut BITMAP as _,
+        )
+    } == 0
+    {
         return Err(SystemError::last());
     }
 
@@ -481,9 +546,7 @@ pub fn get_bitmap(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
         mem::size_of::<BITMAPINFOHEADER>()
     })?;
 
-    let header = unsafe {
-        &mut *(header_storage.get() as *mut BITMAPINFO)
-    };
+    let header = unsafe { &mut *(header_storage.get() as *mut BITMAPINFO) };
 
     header.bmiHeader.biSize = mem::size_of::<BITMAPINFOHEADER>() as _;
     header.bmiHeader.biWidth = bitmap.bmWidth;
@@ -495,7 +558,8 @@ pub fn get_bitmap(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
         header.bmiHeader.biClrUsed = 1 << clr_bits;
     }
 
-    header.bmiHeader.biSizeImage = ((((header.bmiHeader.biWidth * clr_bits + 31) & !31) / 8) * header.bmiHeader.biHeight) as _;
+    header.bmiHeader.biSizeImage =
+        ((((header.bmiHeader.biWidth * clr_bits + 31) & !31) / 8) * header.bmiHeader.biHeight) as _;
     header.bmiHeader.biClrImportant = 0;
 
     let img_size = header.bmiHeader.biSizeImage as usize;
@@ -505,15 +569,35 @@ pub fn get_bitmap(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
     let mut buffer = alloc::vec::Vec::new();
     buffer.resize(img_size, 0u8);
 
-    if unsafe { GetDIBits(dc.0, clipboard_data.as_ptr() as _, 0, bitmap.bmHeight as _, buffer.as_mut_ptr() as _, header_storage.get() as _, DIB_RGB_COLORS) } == 0 {
+    if unsafe {
+        GetDIBits(
+            dc.0,
+            clipboard_data.as_ptr() as _,
+            0,
+            bitmap.bmHeight as _,
+            buffer.as_mut_ptr() as _,
+            header_storage.get() as _,
+            DIB_RGB_COLORS,
+        )
+    } == 0
+    {
         return Err(SystemError::last());
     }
 
     //Write header
     out.extend_from_slice(&u16::to_le_bytes(0x4d42));
-    out.extend_from_slice(&u32::to_le_bytes(mem::size_of::<BITMAPFILEHEADER>() as u32 + header.bmiHeader.biSize + header.bmiHeader.biClrUsed * mem::size_of::<RGBQUAD>() as u32 + header.bmiHeader.biSizeImage));
+    out.extend_from_slice(&u32::to_le_bytes(
+        mem::size_of::<BITMAPFILEHEADER>() as u32
+            + header.bmiHeader.biSize
+            + header.bmiHeader.biClrUsed * mem::size_of::<RGBQUAD>() as u32
+            + header.bmiHeader.biSizeImage,
+    ));
     out.extend_from_slice(&u32::to_le_bytes(0)); //2 * u16 of 0
-    out.extend_from_slice(&u32::to_le_bytes(mem::size_of::<BITMAPFILEHEADER>() as u32 + header.bmiHeader.biSize + header.bmiHeader.biClrUsed * mem::size_of::<RGBQUAD>() as u32));
+    out.extend_from_slice(&u32::to_le_bytes(
+        mem::size_of::<BITMAPFILEHEADER>() as u32
+            + header.bmiHeader.biSize
+            + header.bmiHeader.biClrUsed * mem::size_of::<RGBQUAD>() as u32,
+    ));
 
     out.extend_from_slice(&header.bmiHeader.biSize.to_le_bytes());
     out.extend_from_slice(&header.bmiHeader.biWidth.to_le_bytes());
@@ -527,7 +611,9 @@ pub fn get_bitmap(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
     out.extend_from_slice(&header.bmiHeader.biClrUsed.to_le_bytes());
     out.extend_from_slice(&header.bmiHeader.biClrImportant.to_le_bytes());
 
-    for color in unsafe { slice::from_raw_parts(header.bmiColors.as_ptr(), header.bmiHeader.biClrUsed as _) } {
+    for color in
+        unsafe { slice::from_raw_parts(header.bmiColors.as_ptr(), header.bmiHeader.biClrUsed as _) }
+    {
         out.push(color.rgbBlue);
         out.push(color.rgbGreen);
         out.push(color.rgbRed);
@@ -542,13 +628,13 @@ pub fn get_bitmap(out: &mut alloc::vec::Vec<u8>) -> SysResult<usize> {
 #[inline(always)]
 #[doc(hidden)]
 pub fn set_bitamp(data: &[u8]) -> SysResult<()> {
-    set_bitmap(data)
+    set_bitmap(data, true)
 }
 
 ///Sets bitmap (header + RGB) onto clipboard, from raw bytes.
 ///
 ///Returns `ERROR_INCORRECT_SIZE` if size of data is not valid
-pub fn set_bitmap(data: &[u8]) -> SysResult<()> {
+pub fn set_bitmap(data: &[u8], need_clear: bool) -> SysResult<()> {
     const FILE_HEADER_LEN: usize = mem::size_of::<BITMAPFILEHEADER>();
     const INFO_HEADER_LEN: usize = mem::size_of::<BITMAPINFOHEADER>();
 
@@ -560,8 +646,16 @@ pub fn set_bitmap(data: &[u8]) -> SysResult<()> {
     let mut info_header = mem::MaybeUninit::<BITMAPINFOHEADER>::uninit();
 
     let (file_header, info_header) = unsafe {
-        ptr::copy_nonoverlapping(data.as_ptr(), file_header.as_mut_ptr() as _, FILE_HEADER_LEN);
-        ptr::copy_nonoverlapping(data.as_ptr().add(FILE_HEADER_LEN), info_header.as_mut_ptr() as _, INFO_HEADER_LEN);
+        ptr::copy_nonoverlapping(
+            data.as_ptr(),
+            file_header.as_mut_ptr() as _,
+            FILE_HEADER_LEN,
+        );
+        ptr::copy_nonoverlapping(
+            data.as_ptr().add(FILE_HEADER_LEN),
+            info_header.as_mut_ptr() as _,
+            INFO_HEADER_LEN,
+        );
         (file_header.assume_init(), info_header.assume_init())
     };
 
@@ -578,14 +672,23 @@ pub fn set_bitmap(data: &[u8]) -> SysResult<()> {
     let dc = crate::utils::Scope(unsafe { GetDC(ptr::null_mut()) }, free_dc);
 
     let handle = unsafe {
-        CreateDIBitmap(dc.0, &info_header as _, CBM_INIT, bitmap.as_ptr() as _, &info_header as *const _ as *const BITMAPINFO, DIB_RGB_COLORS)
+        CreateDIBitmap(
+            dc.0,
+            &info_header as _,
+            CBM_INIT,
+            bitmap.as_ptr() as _,
+            &info_header as *const _ as *const BITMAPINFO,
+            DIB_RGB_COLORS,
+        )
     };
 
     if handle.is_null() {
         return Err(SystemError::last());
     }
 
-    let _ = empty();
+    if need_clear {
+        let _ = empty();
+    }
     if unsafe { SetClipboardData(formats::CF_BITMAP, handle as _).is_null() } {
         return Err(SystemError::last());
     }
@@ -593,9 +696,8 @@ pub fn set_bitmap(data: &[u8]) -> SysResult<()> {
     Ok(())
 }
 
-
 ///Set list of file paths to clipboard.
-pub fn set_file_list(paths: &[impl AsRef<str>]) -> SysResult<()> {
+pub fn set_file_list(paths: &[impl AsRef<str>], need_clear: bool) -> SysResult<()> {
     use winapi::shared::windef::POINT;
     #[repr(C, packed(1))]
     pub struct DROPFILES {
@@ -611,7 +713,14 @@ pub fn set_file_list(paths: &[impl AsRef<str>]) -> SysResult<()> {
         let path = path.as_ref();
         unsafe {
             //+1 for null char
-            file_list_size += MultiByteToWideChar(CP_UTF8, 0, path.as_ptr() as *const _, path.len() as _, ptr::null_mut(), 0) + 1
+            file_list_size += MultiByteToWideChar(
+                CP_UTF8,
+                0,
+                path.as_ptr() as *const _,
+                path.len() as _,
+                ptr::null_mut(),
+                0,
+            ) + 1
         }
     }
 
@@ -637,7 +746,14 @@ pub fn set_file_list(paths: &[impl AsRef<str>]) -> SysResult<()> {
             let mut ptr = ptr.add(DROPFILES_SIZE as usize) as *mut u16;
             for path in paths {
                 let path = path.as_ref();
-                let written = MultiByteToWideChar(CP_UTF8, 0, path.as_ptr() as *const _, path.len() as _, ptr, file_list_size);
+                let written = MultiByteToWideChar(
+                    CP_UTF8,
+                    0,
+                    path.as_ptr() as *const _,
+                    path.len() as _,
+                    ptr,
+                    file_list_size,
+                );
                 ptr = ptr.offset(written as isize);
                 //Add null termination character
                 ptr.write(0);
@@ -650,7 +766,9 @@ pub fn set_file_list(paths: &[impl AsRef<str>]) -> SysResult<()> {
         }
     }
 
-    let _ = empty();
+    if need_clear {
+        let _ = empty();
+    }
 
     if unsafe { !SetClipboardData(formats::CF_HDROP, mem.get()).is_null() } {
         //SetClipboardData now has ownership of `mem`.
@@ -660,14 +778,13 @@ pub fn set_file_list(paths: &[impl AsRef<str>]) -> SysResult<()> {
     return Err(error_code::SystemError::last());
 }
 
-
 ///Enumerator over available clipboard formats.
 ///
 ///# Pre-conditions:
 ///
 ///* [open()](fn.open.html) has been called.
 pub struct EnumFormats {
-    idx: u32
+    idx: u32,
 }
 
 impl EnumFormats {
@@ -779,29 +896,31 @@ macro_rules! match_format_name {
 ///* ```Some``` Name of valid format.
 ///* ```None``` Format is invalid or doesn't exist.
 pub fn format_name(format: u32) -> Option<StrBuf<[u8; 52]>> {
-    match_format_name!(format,
-                       CF_BITMAP,
-                       CF_DIB,
-                       CF_DIBV5,
-                       CF_DIF,
-                       CF_DSPBITMAP,
-                       CF_DSPENHMETAFILE,
-                       CF_DSPMETAFILEPICT,
-                       CF_DSPTEXT,
-                       CF_ENHMETAFILE,
-                       CF_HDROP,
-                       CF_LOCALE,
-                       CF_METAFILEPICT,
-                       CF_OEMTEXT,
-                       CF_OWNERDISPLAY,
-                       CF_PALETTE,
-                       CF_PENDATA,
-                       CF_RIFF,
-                       CF_SYLK,
-                       CF_TEXT,
-                       CF_WAVE,
-                       CF_TIFF,
-                       CF_UNICODETEXT);
+    match_format_name!(
+        format,
+        CF_BITMAP,
+        CF_DIB,
+        CF_DIBV5,
+        CF_DIF,
+        CF_DSPBITMAP,
+        CF_DSPENHMETAFILE,
+        CF_DSPMETAFILEPICT,
+        CF_DSPTEXT,
+        CF_ENHMETAFILE,
+        CF_HDROP,
+        CF_LOCALE,
+        CF_METAFILEPICT,
+        CF_OEMTEXT,
+        CF_OWNERDISPLAY,
+        CF_PALETTE,
+        CF_PENDATA,
+        CF_RIFF,
+        CF_SYLK,
+        CF_TEXT,
+        CF_WAVE,
+        CF_TIFF,
+        CF_UNICODETEXT
+    );
 }
 
 ///Returns format name based on it's code (allocating variant suitable for big names)
@@ -815,29 +934,31 @@ pub fn format_name(format: u32) -> Option<StrBuf<[u8; 52]>> {
 ///* ```Some``` Name of valid format.
 ///* ```None``` Format is invalid or doesn't exist.
 pub fn format_name_big(format: u32) -> Option<String> {
-    match_format_name_big!(format,
-                           CF_BITMAP,
-                           CF_DIB,
-                           CF_DIBV5,
-                           CF_DIF,
-                           CF_DSPBITMAP,
-                           CF_DSPENHMETAFILE,
-                           CF_DSPMETAFILEPICT,
-                           CF_DSPTEXT,
-                           CF_ENHMETAFILE,
-                           CF_HDROP,
-                           CF_LOCALE,
-                           CF_METAFILEPICT,
-                           CF_OEMTEXT,
-                           CF_OWNERDISPLAY,
-                           CF_PALETTE,
-                           CF_PENDATA,
-                           CF_RIFF,
-                           CF_SYLK,
-                           CF_TEXT,
-                           CF_WAVE,
-                           CF_TIFF,
-                           CF_UNICODETEXT)
+    match_format_name_big!(
+        format,
+        CF_BITMAP,
+        CF_DIB,
+        CF_DIBV5,
+        CF_DIF,
+        CF_DSPBITMAP,
+        CF_DSPENHMETAFILE,
+        CF_DSPMETAFILEPICT,
+        CF_DSPTEXT,
+        CF_ENHMETAFILE,
+        CF_HDROP,
+        CF_LOCALE,
+        CF_METAFILEPICT,
+        CF_OEMTEXT,
+        CF_OWNERDISPLAY,
+        CF_PALETTE,
+        CF_PENDATA,
+        CF_RIFF,
+        CF_SYLK,
+        CF_TEXT,
+        CF_WAVE,
+        CF_TIFF,
+        CF_UNICODETEXT
+    )
 }
 
 #[inline]
@@ -853,10 +974,10 @@ pub fn format_name_big(format: u32) -> Option<String> {
 ///- Custom format identifier is in range `0xC000...0xFFFF`.
 ///- Function fails if input is not null terminated string.
 pub unsafe fn register_raw_format(name: &[u16]) -> Option<NonZeroU32> {
-    if name.is_empty() || name[name.len()-1] != b'\0' as u16 {
-        return unlikely_empty_size_result()
+    if name.is_empty() || name[name.len() - 1] != b'\0' as u16 {
+        return unlikely_empty_size_result();
     }
-    NonZeroU32::new(RegisterClipboardFormatW(name.as_ptr()) )
+    NonZeroU32::new(RegisterClipboardFormatW(name.as_ptr()))
 }
 
 ///Registers a new clipboard format with specified name.
@@ -870,17 +991,31 @@ pub unsafe fn register_raw_format(name: &[u16]) -> Option<NonZeroU32> {
 ///Custom format identifier is in range `0xC000...0xFFFF`.
 pub fn register_format(name: &str) -> Option<NonZeroU32> {
     let size = unsafe {
-        MultiByteToWideChar(CP_UTF8, 0, name.as_ptr() as *const _, name.len() as c_int, ptr::null_mut(), 0)
+        MultiByteToWideChar(
+            CP_UTF8,
+            0,
+            name.as_ptr() as *const _,
+            name.len() as c_int,
+            ptr::null_mut(),
+            0,
+        )
     };
 
     if size == 0 {
-        return unlikely_empty_size_result()
+        return unlikely_empty_size_result();
     }
 
     if size > 52 {
         let mut buffer = alloc::vec::Vec::with_capacity(size as usize);
         let size = unsafe {
-            MultiByteToWideChar(CP_UTF8, 0, name.as_ptr() as *const _, name.len() as c_int, buffer.as_mut_ptr(), size)
+            MultiByteToWideChar(
+                CP_UTF8,
+                0,
+                name.as_ptr() as *const _,
+                name.len() as c_int,
+                buffer.as_mut_ptr(),
+                size,
+            )
         };
         unsafe {
             buffer.set_len(size as usize);
@@ -890,11 +1025,21 @@ pub fn register_format(name: &str) -> Option<NonZeroU32> {
     } else {
         let mut buffer = mem::MaybeUninit::<[u16; 52]>::uninit();
         let size = unsafe {
-            MultiByteToWideChar(CP_UTF8, 0, name.as_ptr() as *const _, name.len() as c_int, buffer.as_mut_ptr() as *mut u16, 51)
+            MultiByteToWideChar(
+                CP_UTF8,
+                0,
+                name.as_ptr() as *const _,
+                name.len() as c_int,
+                buffer.as_mut_ptr() as *mut u16,
+                51,
+            )
         };
         unsafe {
             ptr::write((buffer.as_mut_ptr() as *mut u16).offset(size as isize), 0);
-            register_raw_format(slice::from_raw_parts(buffer.as_ptr() as *const u16, size as usize + 1))
+            register_raw_format(slice::from_raw_parts(
+                buffer.as_ptr() as *const u16,
+                size as usize + 1,
+            ))
         }
     }
 }
@@ -903,8 +1048,6 @@ pub fn register_format(name: &str) -> Option<NonZeroU32> {
 ///Retrieves the window handle of the current owner of the clipboard.
 ///
 ///Returns `None` if clipboard is not owned.
-pub fn get_owner() -> Option<ptr::NonNull::<winapi::shared::windef::HWND__>> {
-    ptr::NonNull::new(unsafe {
-        GetClipboardOwner()
-    })
+pub fn get_owner() -> Option<ptr::NonNull<winapi::shared::windef::HWND__>> {
+    ptr::NonNull::new(unsafe { GetClipboardOwner() })
 }

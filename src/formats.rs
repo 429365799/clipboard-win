@@ -5,7 +5,7 @@
 //!
 //! Description is taken from [Standard Clipboard Formats](https://msdn.microsoft.com/en-us/library/windows/desktop/ff729168%28v=vs.85%29.aspx)
 
-use crate::{SysResult, Getter, Setter};
+use crate::{Getter, Setter, SysResult};
 
 use winapi::um::winuser;
 
@@ -145,7 +145,7 @@ impl Getter<alloc::vec::Vec<std::path::PathBuf>> for FileList {
 impl<T: AsRef<str>> Setter<[T]> for FileList {
     #[inline(always)]
     fn write_clipboard(&self, data: &[T]) -> SysResult<()> {
-        crate::raw::set_file_list(data)
+        crate::raw::set_file_list(data, false)
     }
 }
 
@@ -164,6 +164,6 @@ impl Getter<alloc::vec::Vec<u8>> for Bitmap {
 impl<T: AsRef<[u8]>> Setter<T> for Bitmap {
     #[inline(always)]
     fn write_clipboard(&self, data: &T) -> SysResult<()> {
-        crate::raw::set_bitmap(data.as_ref())
+        crate::raw::set_bitmap(data.as_ref(), true)
     }
 }
